@@ -1,0 +1,163 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "zeroclaw.fullname" . }}
+  labels:
+    {{- include "zeroclaw.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  revisionHistoryLimit: 5
+  selector:
+    matchLabels:
+      {{- include "zeroclaw.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "zeroclaw.selectorLabels" . | nindent 8 }}
+      annotations:
+        zeroclaw/config-revision: {{ .Values.config.revision | quote }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if .Values.secrets.create }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "zeroclaw.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: prepare-config
+          image: busybox:1.36
+          command:
+            - sh
+            - -c
+            - >-
+              mkdir -p /host/.zeroclaw /host/workspace &&
+              cp /template/config.toml /host/.zeroclaw/config.toml &&
+              if [ -n "${DISCORD_BOT_TOKEN:-}" ]; then sed -i "s|{{ .Values.discord.tokenPlaceholder }}|${DISCORD_BOT_TOKEN}|g" /host/.zeroclaw/config.toml; fi &&
+              chown -R 65534:65534 /host &&
+              chmod 600 /host/.zeroclaw/config.toml
+          securityContext:
+            runAsUser: 0
+          {{- if or .Values.discord.enabled (and .Values.secrets.create .Values.secrets.data.discordBotToken) }}
+          env:
+            - name: DISCORD_BOT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "zeroclaw.secretName" . }}
+                  key: {{ .Values.secrets.keys.discordBotToken }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: /host
+            - name: config-template
+              mountPath: /template
+      containers:
+        - name: zeroclaw
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command:
+            {{- toYaml .Values.command | nindent 12 }}
+          args:
+            {{- toYaml .Values.args | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+          env:
+            - name: HOME
+              value: /zeroclaw-data
+            - name: ZEROCLAW_WORKSPACE
+              value: /zeroclaw-data/workspace
+            {{- if .Values.githubApp.enabled }}
+            - name: GITHUB_APP_PRIVATE_KEY_PATH
+              value: {{ printf "%s/%s" .Values.githubApp.privateKeyMountPath .Values.githubApp.privateKeyFileName }}
+            {{- if .Values.githubApp.appId }}
+            - name: GITHUB_APP_ID
+              value: {{ .Values.githubApp.appId | quote }}
+            {{- end }}
+            {{- if .Values.githubApp.clientId }}
+            - name: GITHUB_CLIENT_ID
+              value: {{ .Values.githubApp.clientId | quote }}
+            {{- end }}
+            {{- if .Values.githubApp.org }}
+            - name: GITHUB_ORG
+              value: {{ .Values.githubApp.org | quote }}
+            {{- end }}
+            {{- end }}
+            {{- if .Values.gitIdentity.enabled }}
+            - name: GIT_AUTHOR_NAME
+              value: {{ .Values.gitIdentity.authorName | quote }}
+            - name: GIT_AUTHOR_EMAIL
+              value: {{ .Values.gitIdentity.authorEmail | quote }}
+            - name: GIT_COMMITTER_NAME
+              value: {{ .Values.gitIdentity.committerName | quote }}
+            - name: GIT_COMMITTER_EMAIL
+              value: {{ .Values.gitIdentity.committerEmail | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.extraEnvFrom }}
+          envFrom:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            tcpSocket:
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            tcpSocket:
+              port: {{ .Values.service.port }}
+            initialDelaySeconds: 20
+            periodSeconds: 20
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /zeroclaw-data
+            {{- if .Values.githubApp.enabled }}
+            - name: github-app-private-key
+              mountPath: {{ .Values.githubApp.privateKeyMountPath }}
+              readOnly: true
+            {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "zeroclaw.pvcName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: config-template
+          configMap:
+            name: {{ include "zeroclaw.fullname" . }}-config
+        {{- if .Values.githubApp.enabled }}
+        - name: github-app-private-key
+          secret:
+            secretName: {{ required "Set githubApp.privateKeySecretName or enable secrets.create with githubAppPrivateKeyPem" (include "zeroclaw.privateKeySecretName" .) }}
+            items:
+              - key: {{ .Values.secrets.keys.githubAppPrivateKeyPem }}
+                path: {{ .Values.githubApp.privateKeyFileName }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

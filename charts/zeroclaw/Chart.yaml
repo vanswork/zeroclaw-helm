@@ -1,0 +1,6 @@
+apiVersion: v2
+name: zeroclaw
+description: Deploy ZeroClaw daemon with a coding-capable custom runtime image.
+type: application
+version: 0.1.0
+appVersion: "0.1.7"

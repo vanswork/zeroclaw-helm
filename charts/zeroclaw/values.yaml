@@ -1,0 +1,168 @@
+image:
+  repository: ghcr.io/vanswork/zeroclaw-coder
+  tag: v0.1.7
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+command:
+  - zeroclaw
+  - daemon
+
+args:
+  - --host
+  - 0.0.0.0
+  - --port
+  - "42617"
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsUser: 65534
+  runAsGroup: 65534
+  fsGroup: 65534
+
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 42617
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 192Mi
+  limits:
+    cpu: 1000m
+    memory: 1024Mi
+
+persistence:
+  enabled: true
+  existingClaim: ""
+  storageClassName: ""
+  accessModes:
+    - ReadWriteOnce
+  size: 5Gi
+
+config:
+  revision: "v1"
+  template: |
+    default_provider = "openai-codex"
+    default_model = "openai-codex/gpt-5.3-codex"
+    default_temperature = 0.7
+    model_routes = []
+    embedding_routes = []
+
+    [autonomy]
+    level = "full"
+    workspace_only = false
+    allowed_commands = ["*"]
+    forbidden_paths = []
+    max_actions_per_hour = 100000
+    max_cost_per_day_cents = 50000
+    require_approval_for_medium_risk = false
+    block_high_risk_commands = false
+    auto_approve = ["shell", "file_read", "file_write", "memory_recall"]
+    always_ask = []
+    non_cli_excluded_tools = []
+    allowed_roots = []
+    shell_env_passthrough = []
+
+    [agent]
+    compact_context = false
+    max_tool_iterations = 80
+    max_history_messages = 120
+    parallel_tools = true
+    tool_dispatcher = "auto"
+
+    [scheduler]
+    enabled = true
+    max_tasks = 256
+    max_concurrent = 12
+
+    [reliability]
+    provider_retries = 4
+    provider_backoff_ms = 750
+    fallback_providers = []
+    api_keys = []
+    channel_initial_backoff_secs = 1
+    channel_max_backoff_secs = 30
+    scheduler_poll_secs = 5
+    scheduler_retries = 4
+
+    [gateway]
+    host = "0.0.0.0"
+    port = 42617
+    require_pairing = false
+    allow_public_bind = true
+    pair_rate_limit_per_minute = 60
+    webhook_rate_limit_per_minute = 240
+    trust_forwarded_headers = false
+
+    [channels_config]
+    cli = true
+    message_timeout_secs = 1200
+
+    [security.resources]
+    max_memory_mb = 1024
+    max_cpu_time_seconds = 300
+    max_subprocesses = 30
+    memory_monitoring = true
+
+    [memory]
+    backend = "sqlite"
+    auto_save = true
+
+    [runtime]
+    kind = "native"
+
+secrets:
+  create: false
+  name: ""
+  keys:
+    discordBotToken: discord-bot-token
+    githubAppPrivateKeyPem: private-key.pem
+  data:
+    discordBotToken: ""
+    githubAppPrivateKeyPem: ""
+
+discord:
+  enabled: false
+  tokenPlaceholder: __DISCORD_BOT_TOKEN__
+
+githubApp:
+  enabled: false
+  privateKeySecretName: ""
+  privateKeyMountPath: /var/run/secrets/github-app
+  privateKeyFileName: private-key.pem
+  appId: ""
+  clientId: ""
+  org: ""
+
+gitIdentity:
+  enabled: false
+  authorName: ""
+  authorEmail: ""
+  committerName: ""
+  committerEmail: ""
+
+extraEnv: []
+extraEnvFrom: []
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
