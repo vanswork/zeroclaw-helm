@@ -12,7 +12,7 @@ This repo provides:
 
 ## Custom image
 
-`Dockerfile` builds from `ghcr.io/zeroclaw-labs/zeroclaw:v0.1.7` and layers a Debian runtime with:
+`Dockerfile` builds from `ghcr.io/zeroclaw-labs/zeroclaw:v0.1.7` and layers a Debian Trixie runtime with:
 
 - `bash`, `coreutils`, `git`, `gh`, `openssh-client`
 - non-root execution (`65534:65534`)

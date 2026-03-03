@@ -1,6 +1,6 @@
 FROM ghcr.io/zeroclaw-labs/zeroclaw:v0.1.7 AS zeroclaw
 
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 ENV DEBIAN_FRONTEND=noninteractive
 
