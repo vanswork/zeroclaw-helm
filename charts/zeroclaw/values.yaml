@@ -152,6 +152,8 @@ githubApp:
   appId: ""
   clientId: ""
   org: ""
+  gitCredentialHelper:
+    enabled: true
 
 gitIdentity:
   enabled: false

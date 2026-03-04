@@ -97,6 +97,9 @@ githubApp:
   org: your-org
 ```
 
+When `githubApp.enabled=true`, the chart also configures a global Git credential helper during init.
+The helper mints a short-lived GitHub App installation token on demand, so plain HTTPS `git clone https://github.com/<org>/<repo>` works for private repositories without interactive `gh auth login`.
+
 ## Notes
 
 - Default chart values are tuned for autonomous coding throughput.
