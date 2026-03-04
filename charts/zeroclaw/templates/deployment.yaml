@@ -77,6 +77,7 @@ spec:
               APP_ID='{{ required "Set githubApp.appId when githubApp.gitCredentialHelper.enabled=true" .Values.githubApp.appId }}'
               ORG='{{ required "Set githubApp.org when githubApp.gitCredentialHelper.enabled=true" .Values.githubApp.org }}'
               KEY_PATH='{{ printf "%s/%s" .Values.githubApp.privateKeyMountPath .Values.githubApp.privateKeyFileName }}'
+              CACHE_FILE='/zeroclaw-data/.zeroclaw/github-app-installation-token.json'
 
               b64url() {
                 openssl base64 -A | tr '+/' '-_' | tr -d '='
@@ -102,10 +103,30 @@ spec:
                 exit 1
               fi
 
-              token=$(curl -fsSL -X POST \
-                -H "Authorization: Bearer ${jwt}" \
-                -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/app/installations/${installation_id}/access_tokens" | jq -r '.token')
+              now_epoch=$(date +%s)
+              token=''
+              exp_epoch=0
+
+              if [ -f "$CACHE_FILE" ]; then
+                token=$(jq -r '.token // empty' "$CACHE_FILE" 2>/dev/null || true)
+                exp_epoch=$(jq -r '.expires_at_epoch // 0' "$CACHE_FILE" 2>/dev/null || echo 0)
+              fi
+
+              if [ -z "$token" ] || [ "$exp_epoch" -le "$((now_epoch + 120))" ]; then
+                token_resp=$(curl -fsSL -X POST \
+                  -H "Authorization: Bearer ${jwt}" \
+                  -H "Accept: application/vnd.github+json" \
+                  "https://api.github.com/app/installations/${installation_id}/access_tokens")
+
+                token=$(printf '%s' "$token_resp" | jq -r '.token')
+                expires_at=$(printf '%s' "$token_resp" | jq -r '.expires_at')
+                exp_epoch=$(date -u -d "$expires_at" +%s 2>/dev/null || echo 0)
+
+                tmp_cache="${CACHE_FILE}.tmp"
+                jq -n --arg token "$token" --argjson expires_at_epoch "$exp_epoch" '{token:$token,expires_at_epoch:$expires_at_epoch}' > "$tmp_cache"
+                mv "$tmp_cache" "$CACHE_FILE"
+                chmod 600 "$CACHE_FILE"
+              fi
 
               printf 'username=x-access-token\npassword=%s\n' "$token"
               EOF
