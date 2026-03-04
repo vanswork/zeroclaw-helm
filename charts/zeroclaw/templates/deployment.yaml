@@ -74,6 +74,10 @@ spec:
                 exit 0
               fi
 
+              APP_ID='{{ required "Set githubApp.appId when githubApp.gitCredentialHelper.enabled=true" .Values.githubApp.appId }}'
+              ORG='{{ required "Set githubApp.org when githubApp.gitCredentialHelper.enabled=true" .Values.githubApp.org }}'
+              KEY_PATH='{{ printf "%s/%s" .Values.githubApp.privateKeyMountPath .Values.githubApp.privateKeyFileName }}'
+
               b64url() {
                 openssl base64 -A | tr '+/' '-_' | tr -d '='
               }
@@ -83,18 +87,18 @@ spec:
               exp=$((now + 540))
 
               header=$(printf '{"alg":"RS256","typ":"JWT"}' | b64url)
-              payload=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$iat" "$exp" "$GITHUB_APP_ID" | b64url)
+              payload=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$iat" "$exp" "$APP_ID" | b64url)
               unsigned="${header}.${payload}"
-              signature=$(printf %s "$unsigned" | openssl dgst -binary -sha256 -sign "$GITHUB_APP_PRIVATE_KEY_PATH" | b64url)
+              signature=$(printf %s "$unsigned" | openssl dgst -binary -sha256 -sign "$KEY_PATH" | b64url)
               jwt="${unsigned}.${signature}"
 
               installation_id=$(curl -fsSL \
                 -H "Authorization: Bearer ${jwt}" \
                 -H "Accept: application/vnd.github+json" \
-                "https://api.github.com/app/installations" | jq -r --arg org "$GITHUB_ORG" '.[] | select(.account.login == $org) | .id' | head -n 1)
+                "https://api.github.com/app/installations" | jq -r --arg org "$ORG" '.[] | select(.account.login == $org) | .id' | head -n 1)
 
               if [ -z "$installation_id" ] || [ "$installation_id" = "null" ]; then
-                echo "GitHub App installation not found for org: $GITHUB_ORG" >&2
+                echo "GitHub App installation not found for org: $ORG" >&2
                 exit 1
               fi
 
@@ -113,16 +117,6 @@ spec:
               if [ -n "${GIT_AUTHOR_NAME:-}" ]; then git config --global user.name "$GIT_AUTHOR_NAME"; fi
               if [ -n "${GIT_AUTHOR_EMAIL:-}" ]; then git config --global user.email "$GIT_AUTHOR_EMAIL"; fi
           env:
-            - name: GITHUB_APP_PRIVATE_KEY_PATH
-              value: {{ printf "%s/%s" .Values.githubApp.privateKeyMountPath .Values.githubApp.privateKeyFileName }}
-            {{- if .Values.githubApp.appId }}
-            - name: GITHUB_APP_ID
-              value: {{ .Values.githubApp.appId | quote }}
-            {{- end }}
-            {{- if .Values.githubApp.org }}
-            - name: GITHUB_ORG
-              value: {{ .Values.githubApp.org | quote }}
-            {{- end }}
             {{- if .Values.gitIdentity.enabled }}
             - name: GIT_AUTHOR_NAME
               value: {{ .Values.gitIdentity.authorName | quote }}
